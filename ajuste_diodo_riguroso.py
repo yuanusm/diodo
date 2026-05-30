@@ -47,6 +47,10 @@ CURRENT_COL = "Corriente"
 CURRENT_UNIT = "mA"  # opciones: "A", "mA", "uA", "µA", "nA"
 PLOT_PATH = Path("ajuste_diodo_riguroso.png")
 GENERAR_GRAFICO = True
+EXPORT_THEORY_CSV = Path("valores_teoricos_modelos_20uA_100uA.csv")
+CORRIENTE_MIN_EXPORT_A = 20e-6
+CORRIENTE_MAX_EXPORT_A = 100e-6
+PUNTOS_EXPORT = 200
 # =============================================================================
 
 
@@ -347,6 +351,55 @@ def make_plot(v: np.ndarray, i: np.ndarray, results: list[FitResult], out: Path)
     fig.savefig(out, dpi=300, bbox_inches="tight")
 
 
+def model_slug(name: str) -> str:
+    return name.split()[0].lower()
+
+
+def voltage_for_target_current(result: FitResult, target_i: float, v_data: np.ndarray) -> float:
+    """Invierte numéricamente I(V) para exportar V teórico a una corriente dada."""
+    if not result.success or result.spec.name == "M0 offset instrumental":
+        return np.nan
+
+    def objective(voltage: float) -> float:
+        return float(result.spec.current_fn(np.array([voltage]), result.params)[0] - target_i)
+
+    span = max(float(np.ptp(v_data)), 1.0)
+    lo = float(np.min(v_data) - 0.25 * span)
+    hi = float(np.max(v_data) + 0.25 * span)
+    flo = objective(lo)
+    fhi = objective(hi)
+
+    for _ in range(60):
+        if np.isfinite(flo) and np.isfinite(fhi) and flo * fhi <= 0:
+            return float(brentq(objective, lo, hi, maxiter=100, xtol=1e-12, rtol=1e-10))
+        lo -= span
+        hi += span
+        span *= 1.5
+        flo = objective(lo)
+        fhi = objective(hi)
+
+    return np.nan
+
+
+def export_theoretical_values(v: np.ndarray, results: list[FitResult], out: Path) -> None:
+    """Exporta voltajes teóricos de todos los modelos entre 20 µA y 100 µA."""
+    i_min = min(CORRIENTE_MIN_EXPORT_A, CORRIENTE_MAX_EXPORT_A)
+    i_max = max(CORRIENTE_MIN_EXPORT_A, CORRIENTE_MAX_EXPORT_A)
+    currents = np.linspace(i_min, i_max, PUNTOS_EXPORT)
+    table: dict[str, np.ndarray] = {
+        "Corriente_objetivo_A": currents,
+        "Corriente_objetivo_uA": currents * 1e6,
+    }
+
+    for result in sorted(results, key=lambda r: r.spec.name):
+        slug = model_slug(result.spec.name)
+        table[f"{slug}_Voltaje_teorico_V"] = np.array([
+            voltage_for_target_current(result, float(current), v) for current in currents
+        ])
+
+    pd.DataFrame(table).to_csv(out, index=False)
+
+
 def main() -> None:
     v, i = load_data(CSV_PATH, VOLTAGE_COL, CURRENT_COL, CURRENT_UNIT)
     if len(v) < 6:
@@ -385,6 +438,9 @@ def main() -> None:
     print("Nota: el modelo completo solo debe aceptarse si reduce BIC/AIC y sus parámetros")
     print("son identificables; Rs y Rp no deben sumarse como términos independientes en V(I).")
     print("=" * 78)
+
+    export_theoretical_values(v, results, EXPORT_THEORY_CSV)
+    print(f"CSV teórico guardado en: {EXPORT_THEORY_CSV}")
 
     if GENERAR_GRAFICO:
         make_plot(v, i, results, PLOT_PATH)

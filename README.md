@@ -44,7 +44,7 @@ También puedes ejecutarlo con Python si tu sistema no respeta el shebang:
 python ajuste_diodo_riguroso.py
 ```
 
-El resultado se imprime en terminal y el gráfico se guarda como `ajuste_diodo_riguroso.png`.
+El resultado se imprime en terminal, el CSV teórico se guarda como `valores_teoricos_modelos_20uA_100uA.csv` y el gráfico se guarda como `ajuste_diodo_riguroso.png`.
 
 ## Si necesitas cambiar archivo, columnas o unidades
 
@@ -57,7 +57,25 @@ CURRENT_COL = "Corriente"
 CURRENT_UNIT = "mA"
 PLOT_PATH = Path("ajuste_diodo_riguroso.png")
 GENERAR_GRAFICO = True
+EXPORT_THEORY_CSV = Path("valores_teoricos_modelos_20uA_100uA.csv")
+CORRIENTE_MIN_EXPORT_A = 20e-6
+CORRIENTE_MAX_EXPORT_A = 100e-6
+PUNTOS_EXPORT = 200
 ```
+
+## CSV teórico exportado
+
+Al finalizar el ajuste, el ejecutable exporta un CSV con una malla de corrientes objetivo entre `20 µA` y `100 µA`. Para cada corriente, incluye el voltaje teórico invertido para cada modelo ajustado (`M1` a `M4`); el modelo `M0` de offset instrumental queda como `NaN` porque no define una curva I-V invertible.
+
+Columnas principales:
+
+- `Corriente_objetivo_A`
+- `Corriente_objetivo_uA`
+- `m0_Voltaje_teorico_V`
+- `m1_Voltaje_teorico_V`
+- `m2_Voltaje_teorico_V`
+- `m3_Voltaje_teorico_V`
+- `m4_Voltaje_teorico_V`
 
 ## Dependencias
 
